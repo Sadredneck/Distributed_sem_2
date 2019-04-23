@@ -8,7 +8,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public class Worker {
 
@@ -28,49 +27,60 @@ public class Worker {
         try {
             serverSocket = new ServerSocket(port, 0, InetAddress.getByName(host));
 
+            System.out.printf("Worker %s: %d started.%n", host, port);
+
             while (working) {
                 Socket socket = serverSocket.accept();
-                threads.add(new Thread(() -> doConnection(socket)));
+                Thread thread = new Thread(() -> doConnection(socket));
+                thread.start();
+                threads.add(thread);
             }
 
-            //ToDo: add thread wait
+            emptyThreads();
 
             serverSocket.close();
+            System.out.printf("Worker %s: %d stopped.%n", host, port);
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    private void emptyThreads() {
+        while (threads.stream().anyMatch(Thread::isAlive)){
+            try {
+                Thread.sleep(0);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
 
     private void doConnection(Socket socket) {
         try {
+            System.out.println("Received request");
             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            BufferedWriter output = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+            //BufferedWriter output = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+            PrintWriter output = new PrintWriter(socket.getOutputStream());
 
-            while (working) {
-                String task = input.readLine();
-                new Thread(() -> performTask(input, output, task));
-            }
+            String task = input.readLine();
+            if (task.toUpperCase().equals("EXIT"))
+                working = false;
+            else
+                interpreter.perform(task);
+            output.println("done\n");
+            output.flush();
 
             input.close();
             output.close();
             socket.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void performTask(BufferedReader input, BufferedWriter output, String task) {
-        interpreter.perform(task);
-        try {
-            output.write("done");
-            output.flush();
+            System.out.println("Request completed.");
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     public static void main(String[] args) {
-        Worker worker = new Worker("localhost", 999);
+        Worker worker = new Worker("localhost", Integer.parseInt(args[0]));
         worker.launch();
     }
 
