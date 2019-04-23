@@ -8,6 +8,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 
 public class Worker {
 
@@ -59,7 +60,6 @@ public class Worker {
         try {
             System.out.println("Received request");
             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            //BufferedWriter output = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
             PrintWriter output = new PrintWriter(socket.getOutputStream());
 
             String task = input.readLine();
@@ -67,7 +67,7 @@ public class Worker {
                 working = false;
             else
                 interpreter.perform(task);
-            output.println("done\n");
+            output.append("done").append("\n");
             output.flush();
 
             input.close();

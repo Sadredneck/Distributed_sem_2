@@ -40,6 +40,7 @@ public class Router {
                 lastTask = task;
             }
 
+            emptyThreads();
             serverSocket.close();
             System.out.printf("Router %s: %d stopped.%n", host, port);
         } catch (IOException e) {
@@ -48,12 +49,7 @@ public class Router {
     }
 
     private void emptyThreads() {
-        while (threads.stream().anyMatch(Thread::isAlive)){
-            try {
-                Thread.sleep(0);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+        while (threads.stream().anyMatch(Thread::isAlive)) {
         }
     }
 
@@ -92,7 +88,7 @@ public class Router {
         try {
             Worker worker = key.length() <= 64 ? workers.get(0) : workers.get(1);
             Socket socket = new Socket(worker.getHost(), worker.getPort());
-            new Thread(() -> send(socket, task));
+            send(socket, task);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -101,12 +97,11 @@ public class Router {
     private void send(Socket socket, String task) {
         try {
             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            //BufferedWriter output = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
             PrintWriter output = new PrintWriter(socket.getOutputStream());
 
-            output.println(task+"\n");
+            output.append(task).append("\n");
             output.flush();
-            input.readLine();
+            System.out.println(input.readLine());
 
             input.close();
             output.close();
@@ -119,8 +114,7 @@ public class Router {
     }
 
     private LinkedList readTasks() {
-        //return new LinkedList(Arrays.asList("100 SELECT", "200 INSERT abc 100", "300 SELECT"));
-        return new LinkedList(Collections.singletonList("200 INSERT abc 100"));
+        return new LinkedList(Arrays.asList("100 SELECT", "200 INSERT abc 100", "300 SELECT"));
     }
 
     public static void main(String[] args) {
