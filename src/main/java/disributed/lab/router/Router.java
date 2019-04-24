@@ -25,27 +25,30 @@ public class Router {
     public void launch() {
         try {
             serverSocket = new ServerSocket(port, 0, InetAddress.getByName(host));
-            LinkedList<String> commands = readTasks();
             System.out.printf("Router %s: %d started.%n", host, port);
 
-            String lastTask = commands.get(0);
-            while (!commands.isEmpty()) {
-                String task = commands.removeFirst();
+            performTasks(readTasks());
 
-                if (!task.split("\\W+", 1)[0].equals(lastTask.split("\\W+", 1)[0]))
-                    emptyThreads();
-                Thread thread = new Thread(() -> sendTask(task));
-                thread.start();
-                threads.add(thread);
-                lastTask = task;
-            }
-
-            emptyThreads();
             serverSocket.close();
             System.out.printf("Router %s: %d stopped.%n", host, port);
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void performTasks(LinkedList<String> tasks) {
+        String[] lastTask = tasks.get(0).trim().split("\\W+");
+        while (!tasks.isEmpty()) {
+            String[] task = tasks.removeFirst().trim().split("\\W+");
+
+            if (!task[0].equals(lastTask[0]))
+                emptyThreads();
+            Thread thread = new Thread(() -> sendTask(task));
+            thread.start();
+            threads.add(thread);
+            lastTask = task;
+        }
+        emptyThreads();
     }
 
     private void emptyThreads() {
@@ -57,60 +60,91 @@ public class Router {
         //ToDo: make interval check
     }
 
-    private void sendTask(String task) {
-        String[] words = task.trim().split("\\W+");
-        switch (words[1].toUpperCase()) {
+    //ToDo: router doesn't stop working for reasons
+    private void sendTask(String[] tasks) {
+        switch (tasks[1].toUpperCase()) {
             case "SELECT":
-                if (words.length == 2)
-                    sendToAll("SELECT");
+                if (tasks.length == 2)
+                    sendSelect();
                 else
-                    sendToSpecific("SELECT " + words[2], words[2]);
+                    sendSelect(tasks[2]);
                 break;
             case "INSERT":
-                sendToSpecific("INSERT " + words[2] + " " + words[3], words[2]);
+                sendInsert(tasks[2], tasks[3]);
                 break;
         }
-
     }
 
-    private void sendToAll(String task) {
+    //ToDo: make less code in send*()
+    private Map<String, Long> sendSelect() {
+        Map<String, Long> response = new HashMap<>();
         try {
             for (Worker worker : workers) {
                 Socket socket = new Socket(worker.getHost(), worker.getPort());
-                send(socket, task);
+                BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                PrintWriter output = new PrintWriter(socket.getOutputStream());
+
+                output.append("SELECT").append("\n");
+                output.flush();
+                String answer = input.readLine();
+                while (!answer.toUpperCase().equals("DONE")) {
+                    String[] array = answer.split("\\W+");
+                    response.put(array[0], Long.parseLong(array[1]));
+                }
+                System.out.println(answer);
+
+                input.close();
+                output.close();
+                socket.close();
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
+        return response;
     }
 
-    private void sendToSpecific(String task, String key) {
+    private Long sendSelect(String key) {
+        Worker worker = key.length() <= 64 ? workers.get(0) : workers.get(1);
+        Long result = null;
         try {
-            Worker worker = key.length() <= 64 ? workers.get(0) : workers.get(1);
             Socket socket = new Socket(worker.getHost(), worker.getPort());
-            send(socket, task);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void send(Socket socket, String task) {
-        try {
             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             PrintWriter output = new PrintWriter(socket.getOutputStream());
 
-            output.append(task).append("\n");
+            output.append("SELECT ").append(key).append("\n");
+            output.flush();
+            String answer = input.readLine();
+            if (!answer.toUpperCase().equals("NONE"))
+                result = Long.parseLong(answer.split("\\W+")[1]);
+
+            input.close();
+            output.close();
+            socket.close();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return result;
+    }
+
+    private void sendInsert(String key, String value) {
+        Worker worker = key.length() <= 64 ? workers.get(0) : workers.get(1);
+        try {
+            Socket socket = new Socket(worker.getHost(), worker.getPort());
+            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            PrintWriter output = new PrintWriter(socket.getOutputStream());
+
+            output.append("INSERT ").append(key).append(" ").append(value).append("\n");
             output.flush();
             System.out.println(input.readLine());
 
             input.close();
             output.close();
             socket.close();
+
         } catch (IOException e) {
             e.printStackTrace();
-            System.err.println("Failure at send(Socket, String)");
         }
-
     }
 
     private LinkedList readTasks() {

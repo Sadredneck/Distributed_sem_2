@@ -8,7 +8,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Scanner;
 
 public class Worker {
 
@@ -47,7 +46,7 @@ public class Worker {
     }
 
     private void emptyThreads() {
-        while (threads.stream().anyMatch(Thread::isAlive)){
+        while (threads.stream().anyMatch(Thread::isAlive)) {
             try {
                 Thread.sleep(0);
             } catch (InterruptedException e) {
@@ -66,7 +65,7 @@ public class Worker {
             if (task.toUpperCase().equals("EXIT"))
                 working = false;
             else
-                interpreter.perform(task);
+                perform(output, task);
             output.append("done").append("\n");
             output.flush();
 
@@ -76,6 +75,28 @@ public class Worker {
             System.out.println("Request completed.");
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    private void perform(PrintWriter output, String task) {
+        String[] words = task.split("\\W+");
+
+        switch (words[0].toUpperCase()) {
+            case "SELECT":
+                if (words.length == 1) {
+                    List<String> list = interpreter.doSelect();
+                    for (String line : list) {
+                        output.append(line).append("\n");
+                        output.flush();
+                    }
+                } else {
+                    output.append(interpreter.doSelect(words[1])).append("\n");
+                    output.flush();
+                }
+                break;
+            case "INSERT":
+                interpreter.doInsert(words[1], Long.parseLong(words[2]));
+                break;
         }
     }
 
