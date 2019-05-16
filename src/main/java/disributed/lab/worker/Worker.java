@@ -97,6 +97,10 @@ public class Worker {
             case "INSERT":
                 interpreter.doInsert(words[1], Long.parseLong(words[2]));
                 break;
+            case "CHECK":
+                output.append("YES");
+                output.flush();
+                break;
         }
     }
 

@@ -43,6 +43,7 @@ public class Router {
 
             if (!task[0].equals(lastTask[0]))
                 emptyThreads();
+
             Thread thread = new Thread(() -> sendTask(task));
             thread.start();
             threads.add(thread);
@@ -56,11 +57,27 @@ public class Router {
         }
     }
 
-    private void checkActive(Socket socket) {
-        //ToDo: make interval check
+    private void checkActive(Worker worker) {
+        try {
+            Socket socket = new Socket(worker.getHost(), worker.getPort());
+            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            PrintWriter output = new PrintWriter(socket.getOutputStream());
+
+            output.append("CHECK").append("\n");
+            output.flush();
+            String answer = input.readLine();
+            while (!answer.equals("YES")) {
+            }
+            System.out.println(answer);
+
+            input.close();
+            output.close();
+            socket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
-    //ToDo: router doesn't stop working for reasons
     private void sendTask(String[] tasks) {
         switch (tasks[1].toUpperCase()) {
             case "SELECT":
@@ -104,7 +121,7 @@ public class Router {
     }
 
     private Long sendSelect(String key) {
-        Worker worker = key.length() <= 64 ? workers.get(0) : workers.get(1);
+        Worker worker = getWorkerByKey(key);
         Long result = null;
         try {
             Socket socket = new Socket(worker.getHost(), worker.getPort());
@@ -128,7 +145,7 @@ public class Router {
     }
 
     private void sendInsert(String key, String value) {
-        Worker worker = key.length() <= 64 ? workers.get(0) : workers.get(1);
+        Worker worker = getWorkerByKey(key);
         try {
             Socket socket = new Socket(worker.getHost(), worker.getPort());
             BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -145,6 +162,10 @@ public class Router {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private Worker getWorkerByKey(String key){
+        return workers.get(key.hashCode() / workers.size());
     }
 
     private LinkedList readTasks() {
