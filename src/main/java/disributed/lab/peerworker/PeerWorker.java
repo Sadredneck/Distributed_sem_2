@@ -33,17 +33,12 @@ public class PeerWorker {
         this.number = number;
     }
 
-    public PeerWorker(String host, int port) {
-        this.host = host;
-        this.port = port;
-    }
-
     public static void main(String[] args) {
-        PeerWorker worker = new PeerWorker("localhost", Integer.valueOf(args[0]), Integer.valueOf(args[1]));
+        PeerWorker worker = new PeerWorker("localhost", Integer.valueOf(args[1]), Integer.valueOf(args[0]));
 
-        worker.peerWorkers.put(0, new PeerWorker("localhost", 555));
-        worker.peerWorkers.put(1, new PeerWorker("localhost", 777));
-        worker.peerWorkers.put(2, new PeerWorker("localhost", 888));
+        worker.peerWorkers.put(0, new PeerWorker("localhost", 555, 0));
+        worker.peerWorkers.put(1, new PeerWorker("localhost", 777, 1));
+        worker.peerWorkers.put(2, new PeerWorker("localhost", 888, 2));
 
         worker.launch();
     }
@@ -52,13 +47,14 @@ public class PeerWorker {
         try {
             serverSocket = new ServerSocket(port, 0, InetAddress.getByName(host));
             System.out.printf("Router number %d %s: %d started.%n", number, host, port);
-
             inputThread = new Thread(this::acceptRequests);
             inputThread.start();
 
             waitForAll();
             performTasks(readTasks());
 
+            working = false;
+            emptyThreads(outputThreads);
             serverSocket.close();
         } catch (IOException e) {
             e.printStackTrace();
@@ -68,53 +64,27 @@ public class PeerWorker {
     //Waiting all workers
     private void waitForAll() {
         for (Map.Entry<Integer, PeerWorker> entry : peerWorkers.entrySet()) {
-            boolean trying = true;
-            while (trying) {
-                try (Socket socket = new Socket(entry.getValue().host, entry.getValue().port)) {
-                    PrintWriter output = new PrintWriter(socket.getOutputStream());
+            if (entry.getKey() != number) {
+                boolean trying = true;
+                while (trying) {
+                    try (Socket socket = new Socket(entry.getValue().getHost(), entry.getValue().getPort())) {
+                        PrintWriter output = new PrintWriter(socket.getOutputStream());
 
-                    output.append("HI").append("\n");
-                    output.flush();
+                        output.append("HI").append("\n");
+                        output.flush();
 
-                    output.close();
-                    socket.close();
-                    trying = false;
-                } catch (IOException ex) {
-                    try {
-                        Thread.sleep(0);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-    }
-
-    private void notifyWorkers() {
-        try {
-            for (Map.Entry<Integer, PeerWorker> entry : peerWorkers.entrySet()) {
-                Socket socket = null;
-                while (socket == null) {
-                    try {
-                        socket = new Socket(entry.getValue().host, entry.getValue().port);
-                    } catch (ConnectException e) {
+                        output.close();
+                        socket.close();
+                        trying = false;
+                    } catch (IOException ex) {
                         try {
-                            TimeUnit.SECONDS.sleep(1);
-                        } catch (InterruptedException ex) {
-                            ex.printStackTrace();
+                            Thread.sleep(0);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
                         }
                     }
                 }
-                PrintWriter output = new PrintWriter(socket.getOutputStream());
-
-                output.append("HI ").append(String.valueOf(number)).append("\n");
-                output.flush();
-
-                output.close();
-                socket.close();
             }
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 
@@ -126,6 +96,9 @@ public class PeerWorker {
             if (Integer.parseInt(task[0]) != state) {
                 emptyThreads(inputThreads);
                 sendState(Integer.valueOf(task[0]));
+                updateState(number, Integer.parseInt(task[0]));
+            }
+            while (Integer.parseInt(task[0]) != state) {
             }
 
             Thread thread = new Thread(() -> sendTask(task));
@@ -152,14 +125,16 @@ public class PeerWorker {
     private void sendState(int state) {
         try {
             for (Map.Entry<Integer, PeerWorker> entry : peerWorkers.entrySet()) {
-                Socket socket = new Socket(entry.getValue().host, entry.getValue().port);
-                PrintWriter output = new PrintWriter(socket.getOutputStream());
+                if (entry.getKey() != number) {
+                    Socket socket = new Socket(entry.getValue().host, entry.getValue().port);
+                    PrintWriter output = new PrintWriter(socket.getOutputStream());
 
-                output.append("STATE ").append(String.valueOf(number)).append(" ").append(String.valueOf(state)).append("\n");
-                output.flush();
+                    output.append("STATE ").append(String.valueOf(number)).append(" ").append(String.valueOf(state)).append("\n");
+                    output.flush();
 
-                output.close();
-                socket.close();
+                    output.close();
+                    socket.close();
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -170,22 +145,26 @@ public class PeerWorker {
         Map<String, Long> response = new HashMap<>();
         try {
             for (Map.Entry<Integer, PeerWorker> entry : peerWorkers.entrySet()) {
-                Socket socket = new Socket(entry.getValue().host, entry.getValue().port);
-                BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                PrintWriter output = new PrintWriter(socket.getOutputStream());
+                if (entry.getKey() == number)
+                    interpreter.doSelect();
+                else {
+                    Socket socket = new Socket(entry.getValue().host, entry.getValue().port);
+                    BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                    PrintWriter output = new PrintWriter(socket.getOutputStream());
 
-                output.append("SELECT").append("\n");
-                output.flush();
-                String answer = input.readLine();
-                while (!answer.toUpperCase().equals("DONE")) {
-                    String[] array = answer.split("\\W+");
-                    response.put(array[0], Long.parseLong(array[1]));
+                    output.append("SELECT").append("\n");
+                    output.flush();
+                    String answer = input.readLine();
+                    while (!answer.toUpperCase().equals("DONE")) {
+                        String[] array = answer.split("\\W+");
+                        response.put(array[0], Long.parseLong(array[1]));
+                    }
+                    System.out.println(answer);
+
+                    input.close();
+                    output.close();
+                    socket.close();
                 }
-                System.out.println(answer);
-
-                input.close();
-                output.close();
-                socket.close();
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -196,43 +175,49 @@ public class PeerWorker {
     private Long sendSelect(String key) {
         PeerWorker worker = getWorkerByKey(key);
         Long result = null;
-        try {
-            Socket socket = new Socket(worker.host, worker.port);
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            PrintWriter output = new PrintWriter(socket.getOutputStream());
+        if (worker.getNumber() == number)
+            result = Long.parseLong(interpreter.doSelect(key));
+        else
+            try {
+                Socket socket = new Socket(worker.host, worker.port);
+                BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                PrintWriter output = new PrintWriter(socket.getOutputStream());
 
-            output.append("SELECT ").append(key).append("\n");
-            output.flush();
-            String answer = input.readLine();
-            if (!answer.toUpperCase().equals("NONE"))
-                result = Long.parseLong(answer.split("\\W+")[1]);
+                output.append("SELECT ").append(key).append("\n");
+                output.flush();
+                String answer = input.readLine();
+                if (!answer.toUpperCase().equals("NONE"))
+                    result = Long.parseLong(answer.split("\\W+")[1]);
 
-            input.close();
-            output.close();
-            socket.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+                input.close();
+                output.close();
+                socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         return result;
     }
 
     private void sendInsert(String key, String value) {
         PeerWorker worker = getWorkerByKey(key);
-        try {
-            Socket socket = new Socket(worker.host, worker.port);
-            BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            PrintWriter output = new PrintWriter(socket.getOutputStream());
+        if (worker.getNumber() == number)
+            interpreter.doInsert(key, Long.parseLong(value));
+        else
+            try {
+                Socket socket = new Socket(worker.host, worker.port);
+                BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                PrintWriter output = new PrintWriter(socket.getOutputStream());
 
-            output.append("INSERT ").append(key).append(" ").append(value).append("\n");
-            output.flush();
-            System.out.println(input.readLine());
+                output.append("INSERT ").append(key).append(" ").append(value).append("\n");
+                output.flush();
+                System.out.println(input.readLine());
 
-            input.close();
-            output.close();
-            socket.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+                input.close();
+                output.close();
+                socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
     }
 
     private PeerWorker getWorkerByKey(String key) {
@@ -252,7 +237,6 @@ public class PeerWorker {
                 e.printStackTrace();
             }
         }
-        emptyThreads(outputThreads);
     }
 
     private void doConnection(Socket socket) {
@@ -305,6 +289,7 @@ public class PeerWorker {
         int minState = Integer.MAX_VALUE;
         for (Map.Entry<Integer, PeerWorker> entry : peerWorkers.entrySet())
             minState = Math.min(entry.getValue().state, minState);
+        state = minState;
     }
 
     private void emptyThreads(LinkedList<Thread> threads) {
@@ -321,11 +306,15 @@ public class PeerWorker {
         return new LinkedList(Arrays.asList("100 SELECT", "200 INSERT abc 100", "300 SELECT"));
     }
 
-    public static boolean hostAvailabilityCheck(String host, int port) {
-        try (Socket s = new Socket(host, port)) {
-            return true;
-        } catch (IOException ex) {
-        }
-        return false;
+    public String getHost() {
+        return host;
+    }
+
+    public int getPort() {
+        return port;
+    }
+
+    public int getNumber() {
+        return number;
     }
 }
