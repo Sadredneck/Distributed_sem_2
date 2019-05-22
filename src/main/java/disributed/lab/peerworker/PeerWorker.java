@@ -91,14 +91,15 @@ public class PeerWorker {
     //Work with commands
     private void performTasks(LinkedList<String> tasks) {
         while (!tasks.isEmpty()) {
-            String[] task = tasks.removeFirst().trim().split("\\W+");
+            String line = tasks.removeFirst();
+            String[] task = line.trim().split("\\W+");
 
             if (Integer.parseInt(task[0]) != state) {
                 emptyThreads(inputThreads);
                 sendState(Integer.valueOf(task[0]));
                 updateState(number, Integer.parseInt(task[0]));
-            }
-            while (Integer.parseInt(task[0]) != state) {
+                while (Integer.parseInt(task[0]) != state) {
+                }
             }
 
             Thread thread = new Thread(() -> sendTask(task));
@@ -187,7 +188,7 @@ public class PeerWorker {
                 output.flush();
                 String answer = input.readLine();
                 if (!answer.toUpperCase().equals("NONE"))
-                    result = Long.parseLong(answer.split("\\W+")[1]);
+                    result = Long.parseLong(answer.split("\\W+")[0]);
 
                 input.close();
                 output.close();
@@ -221,7 +222,7 @@ public class PeerWorker {
     }
 
     private PeerWorker getWorkerByKey(String key) {
-        return peerWorkers.get(key.hashCode() / peerWorkers.size());
+        return peerWorkers.get(key.hashCode() % peerWorkers.size());
     }
 
 
@@ -300,10 +301,12 @@ public class PeerWorker {
                 e.printStackTrace();
             }
         }
+        threads.clear();
     }
 
     private LinkedList readTasks() {
-        return new LinkedList(Arrays.asList("100 SELECT", "200 INSERT abc 100", "300 SELECT"));
+        return new LinkedList(Arrays.asList("100 SELECT", "200 INSERT abc 100", "300 SELECT abc",
+                "400 INSERT abc 100", "400 INSERT abd 100", "400 INSERT abee 100", "600 SELECT"));
     }
 
     public String getHost() {
